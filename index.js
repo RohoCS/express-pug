@@ -1,9 +1,13 @@
 import express from "express";
-
 import pug from "pug";
+import cookieParser from "cookie-parser";
+import jwt from "jsonwebtoken";
+
+import authenticateJWT from "./middleware/jwt.middleware.js";
 
 const app = express();
 const PORT = 3000;
+const SECRET_KEY = "SECRET_KEY";
 
 const USERS = [
   {
@@ -41,12 +45,142 @@ const ARTICLES = [
   },
 ];
 
+const registeredUsers = [];
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+app.use(express.static("public"));
+
 app.set("view engine", "pug");
 app.set("views", "./src/pug");
 
 // app.set("view engine", "ejs");
 // app.set("views", "./src/ejs");
 
+// theme
+app.post("/set-theme", (req, res) => {
+  const { theme } = req.body;
+
+  if (!theme || !["light", "dark", "auto"].includes(theme)) {
+    return res
+      .status(400)
+      .json({ message: "Невірна тема. Доступні: light, dark, auto" });
+  }
+
+  res.cookie("preferredTheme", theme, {
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    httpOnly: false,
+    sameSite: "lax",
+  });
+
+  res.json({ message: `Тему "${theme}" збережено успішно!`, theme });
+});
+
+app.get("/get-theme", (req, res) => {
+  const theme = req.cookies.preferredTheme || "light";
+  res.json({ theme });
+});
+
+// reg
+app.post("/register", (req, res) => {
+  const { username, password, email } = req.body;
+
+  if (!username || !password || !email) {
+    return res
+      .status(400)
+      .json({ message: "Всі поля обов'язкові: username, password, email" });
+  }
+
+  const existingUser = registeredUsers.find((u) => u.username === username);
+  if (existingUser) {
+    return res
+      .status(409)
+      .json({ message: "Користувач з таким іменем вже існує" });
+  }
+
+  const newUser = {
+    id: registeredUsers.length + 1,
+    username,
+    password,
+    email,
+  };
+  registeredUsers.push(newUser);
+
+  res.status(201).json({
+    message: "Користувача зареєстровано успішно!",
+    user: { id: newUser.id, username: newUser.username, email: newUser.email },
+  });
+});
+
+// login
+app.post("/login", (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res
+      .status(400)
+      .json({ message: "Username та password обов'язкові" });
+  }
+
+  const user = registeredUsers.find(
+    (u) => u.username === username && u.password === password
+  );
+
+  if (!user) {
+    return res.status(401).json({ message: "Невірні облікові дані" });
+  }
+
+  const token = jwt.sign(
+    { id: user.id, username: user.username, email: user.email },
+    JWT_SECRET,
+    { expiresIn: "24h" }
+  );
+
+  res.cookie("authToken", token, {
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: "strict",
+    secure: false,
+  });
+
+  res.json({
+    message: "Вхід виконано успішно!",
+    user: { id: user.id, username: user.username, email: user.email },
+  });
+});
+
+// exit
+app.post("/logout", (req, res) => {
+  res.clearCookie("authToken");
+  res.json({ message: "Вихід виконано успішно!" });
+});
+
+// protected
+app.get("/profile", authenticateJWT, (req, res) => {
+  res.json({
+    message: "Це захищений маршрут",
+    user: req.user,
+  });
+});
+
+app.get("/auth-status", (req, res) => {
+  const token = req.cookies.authToken;
+
+  if (!token) {
+    return res.json({ authenticated: false });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    res.json({ authenticated: true, user: decoded });
+  } catch (error) {
+    res.json({ authenticated: false });
+  }
+});
+
+// =====================
 app.get("/users", (req, res) => {
   res.render("users", { users: USERS });
 });
