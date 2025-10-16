@@ -58,7 +58,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.static("public"));
 
-// Налаштування сесій
 app.use(
   session({
     secret: SESSION_SECRET,
@@ -66,14 +65,13 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: false, // Встановіть true для HTTPS
-      maxAge: 24 * 60 * 60 * 1000, // 24 години
-      sameSite: 'lax'
+      secure: false,
+      maxAge: 24 * 60 * 60 * 1000,
+      sameSite: "lax",
     },
   })
 );
 
-// Ініціалізація Passport
 initializePassport(registeredUsers);
 app.use(passport.initialize());
 app.use(passport.session());
@@ -108,7 +106,7 @@ app.get("/get-theme", (req, res) => {
   res.json({ theme });
 });
 
-// reg - оновлено для Passport з хешуванням паролів
+// reg
 app.post("/register", async (req, res) => {
   const { username, password, email } = req.body;
 
@@ -126,7 +124,6 @@ app.post("/register", async (req, res) => {
   }
 
   try {
-    // Хешування пароля
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = {
@@ -139,30 +136,34 @@ app.post("/register", async (req, res) => {
 
     res.status(201).json({
       message: "Користувача зареєстровано успішно!",
-      user: { id: newUser.id, username: newUser.username, email: newUser.email },
+      user: {
+        id: newUser.id,
+        username: newUser.username,
+        email: newUser.email,
+      },
     });
   } catch (error) {
     res.status(500).json({ message: "Помилка при реєстрації користувача" });
   }
 });
 
-// login - оновлено для Passport
+// login
 app.post("/login", (req, res, next) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res
-      .status(400)
-      .json({ message: "Email та password обов'язкові" });
+    return res.status(400).json({ message: "Email та password обов'язкові" });
   }
 
-  passport.authenticate('local', (err, user, info) => {
+  passport.authenticate("local", (err, user, info) => {
     if (err) {
       return res.status(500).json({ message: "Помилка сервера" });
     }
 
     if (!user) {
-      return res.status(401).json({ message: info.message || "Невірні облікові дані" });
+      return res
+        .status(401)
+        .json({ message: info.message || "Невірні облікові дані" });
     }
 
     req.logIn(user, (err) => {
@@ -178,19 +179,19 @@ app.post("/login", (req, res, next) => {
   })(req, res, next);
 });
 
-// exit - оновлено для Passport
+// exit
 app.post("/logout", (req, res) => {
   req.logout((err) => {
     if (err) {
       return res.status(500).json({ message: "Помилка при виході" });
     }
-    
+
     req.session.destroy((err) => {
       if (err) {
         return res.status(500).json({ message: "Помилка при знищенні сесії" });
       }
-      
-      res.clearCookie('connect.sid');
+
+      res.clearCookie("connect.sid");
       res.json({ message: "Вихід виконано успішно!" });
     });
   });
@@ -212,7 +213,6 @@ app.get("/auth-status", (req, res) => {
   }
 });
 
-// Захищений маршрут /protected з використанням Passport
 app.get("/protected", ensureAuthenticated, (req, res) => {
   res.json({
     message: "Це захищений маршрут /protected",
